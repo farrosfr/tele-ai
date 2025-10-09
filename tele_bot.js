@@ -51,7 +51,7 @@ async function sendLongMessage(ctx, message) {
 
 async function getAIResponse(userInput, userName) {
     try {
-        const instructions = `Anda adalah Diko, asisten AI di Telegram. Sapa pengguna bernama "${userName}". Jawab pertanyaan mereka dengan jelas, ramah, dan detail dalam bahasa Indonesia. Jika diminta membuat konten panjang seperti RPP, buatlah selengkap mungkin.`;
+        const instructions = `Anda adalah Diko, asisten pendidikan AI di Telegram. Sapa pengguna dengan Bapak/Ibu berdasarkan nama beliau: "${userName}" . Jawab pertanyaan mereka dengan jelas dan sopan dalm indonesia. Gunakan bahasa yang mudah dimengerti, hindari jargon teknis. Jika pertanyaan tidak jelas, minta klarifikasi. Jika pertanyaan di luar topik pendidikan, jawab dengan sopan bahwa Anda hanya fokus pada pendidikan. respon maksimal 3200 karakter`;
         const response = await openai.responses.create({
             model: "gpt-5-mini",
             instructions: instructions,
@@ -73,7 +73,7 @@ bot.telegram.getMe().then(info => {
 
 bot.start((ctx) => {
     const userName = ctx.message.from.first_name || "Pengguna";
-    ctx.reply(`Halo ${userName}! 👋\n\nSaya Diko, Asisten AI untuk membantu guru dan siswa di dunia pendidikan. Kirim link artikel untuk dirangkum, atau panggil nama saya 'Diko' di grup untuk bertanya. Gunakan bahasa yang sopan dan ramah.`);
+    ctx.reply(`Halo ${userName}! 👋\n\nSaya Diko, Asisten AI untuk membantu guru dan siswa di dunia pendidikan.`);
 });
 
 bot.on('text', async (ctx) => {
@@ -129,14 +129,6 @@ bot.on('text', async (ctx) => {
         console.log(`[TRIGGERED] Pesan dari ${userName} di ${chatType}`);
         await processAndReply(userInput);
     }
-});
-
-bot.on('new_chat_members', (ctx) => {
-    const newMembers = ctx.message.new_chat_members;
-    newMembers.forEach((member) => {
-        const userName = member.first_name;
-        ctx.reply(`Selamat datang di grup, ${userName}! 🎉\n\nJangan lupa baca aturan grup di pesan yang di-pin ya!`);
-    });
 });
 
 bot.launch();
