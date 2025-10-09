@@ -1,10 +1,9 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const { OpenAI } = require("openai");
-const axios = require('axios'); // <-- Impor library baru
-const cheerio = require('cheerio'); // <-- Impor library baru
+const axios = require('axios');
+const cheerio = require('cheerio');
 
-// --- Inisialisasi Kunci API dan Klien ---
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -15,10 +14,44 @@ if (!BOT_TOKEN || !OPENAI_API_KEY) {
 const bot = new Telegraf(BOT_TOKEN);
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-// --- Fungsi untuk memanggil AI (Otak Bot) ---
+// --- FUNGSI PEMECAH PESAN PANJANG ---
+async function sendLongMessage(ctx, message) {
+    const MAX_LENGTH = 4096;
+    if (message.length <= MAX_LENGTH) {
+        // Jika pesan tidak panjang, kirim seperti biasa
+        return await ctx.reply(message, { reply_to_message_id: ctx.message.message_id });
+    }
+
+    console.log(`[INFO] Pesan terlalu panjang (${message.length} karakter), akan dipecah.`);
+    const messageParts = [];
+    let currentPart = '';
+
+    // Pecah berdasarkan baris baru untuk menjaga format
+    const lines = message.split('\n');
+    for (const line of lines) {
+        if (currentPart.length + line.length + 1 > MAX_LENGTH) {
+            messageParts.push(currentPart);
+            currentPart = '';
+        }
+        currentPart += line + '\n';
+    }
+    messageParts.push(currentPart);
+
+    // Kirim bagian pertama sebagai balasan
+    await ctx.reply(messageParts[0], { reply_to_message_id: ctx.message.message_id });
+
+    // Kirim bagian selanjutnya
+    for (let i = 1; i < messageParts.length; i++) {
+        // Beri sedikit jeda agar tidak di-rate limit oleh Telegram
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await ctx.reply(messageParts[i]);
+    }
+}
+
+
 async function getAIResponse(userInput, userName) {
     try {
-        const instructions = `Anda adalah Diko, asisten AI di Telegram. Sapa pengguna bernama "${userName}". Jawab pertanyaan mereka dengan jelas dan ramah dalam bahasa Indonesia.`;
+        const instructions = `Anda adalah Diko, asisten AI di Telegram. Sapa pengguna bernama "${userName}". Jawab pertanyaan mereka dengan jelas, ramah, dan detail dalam bahasa Indonesia. Jika diminta membuat konten panjang seperti RPP, buatlah selengkap mungkin.`;
         const response = await openai.responses.create({
             model: "gpt-5-mini",
             instructions: instructions,
@@ -27,7 +60,7 @@ async function getAIResponse(userInput, userName) {
         return response.output_text;
     } catch (error) {
         console.error("Error saat memanggil OpenAI API:", error);
-        return "Maaf, sepertinya AI sedang mengalami sedikit gangguan. Coba lagi nanti ya. 🙏";
+        return "Maaf, sepertinya AI sedang mengalami sedikit gangguan. 🙏";
     }
 }
 
@@ -40,7 +73,7 @@ bot.telegram.getMe().then(info => {
 
 bot.start((ctx) => {
     const userName = ctx.message.from.first_name || "Pengguna";
-    ctx.reply(`Halo ${userName}! 👋\n\nSaya Diko, bot AI yang siap membantu. Di grup, panggil nama saya 'Diko' atau balas pesan saya agar saya merespons.`);
+    ctx.reply(`Halo ${userName}! 👋\n\nSaya Diko, Asisten AI untuk membantu guru dan siswa di dunia pendidikan. Kirim link artikel untuk dirangkum, atau panggil nama saya 'Diko' di grup untuk bertanya. Gunakan bahasa yang sopan dan ramah.`);
 });
 
 bot.on('text', async (ctx) => {
@@ -51,63 +84,50 @@ bot.on('text', async (ctx) => {
     const chatType = ctx.chat.type;
     const repliedMessage = ctx.message.reply_to_message;
 
-    // --- LOGIKA BARU DENGAN PRIORITAS ---
+    // Fungsi untuk memproses dan mengirim jawaban AI
+    const processAndReply = async (input) => {
+        await ctx.replyWithChatAction('typing');
+        const aiResponse = await getAIResponse(input, userName);
+        // --- Gunakan fungsi baru untuk mengirim ---
+        await sendLongMessage(ctx, aiResponse);
+    };
 
-    // PRIORITAS 1: Cek apakah ini balasan ke sebuah pesan
-    if (repliedMessage) {
-        const originalMessageText = repliedMessage.text || "";
-        const userReplyText = userInput.toLowerCase();
-
-        // Sub-Prioritas 1.1: Cek permintaan rangkuman artikel
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
-        const urls = originalMessageText.match(urlRegex);
-        
-        if (urls && userReplyText.includes('diko') && (userReplyText.includes('rangkum') || userReplyText.includes('summary'))) {
-            console.log(`[SUMMARY DETECTED] Permintaan rangkuman dari ${userName} untuk link: ${urls[0]}`);
-            await ctx.replyWithChatAction('typing');
-            
-            try {
-                // Ambil konten web
-                const { data } = await axios.get(urls[0]);
-                // Ekstrak teks dari HTML
-                const $ = cheerio.load(data);
-                const mainText = $('body').text().replace(/\s\s+/g, ' ').trim();
-
-                if (mainText.length < 100) {
-                    await ctx.reply("Maaf, saya tidak bisa menemukan cukup teks untuk dirangkum dari link tersebut.", { reply_to_message_id: ctx.message.message_id });
-                    return;
-                }
-
-                // Buat prompt untuk AI
-                const promptForSummary = `Rangkum poin-poin utama dari artikel berikut dalam 3-5 kalimat: "${mainText.substring(0, 4000)}"`;
-                const summary = await getAIResponse(promptForSummary, userName);
-                await ctx.reply(`Berikut rangkuman dari artikel tersebut:\n\n${summary}`, { reply_to_message_id: ctx.message.message_id });
-
-            } catch (error) {
-                console.error("Gagal mengambil atau merangkum URL:", error);
-                await ctx.reply("Maaf, terjadi kesalahan saat mencoba mengakses atau merangkum link tersebut.", { reply_to_message_id: ctx.message.message_id });
-            }
-            return;
-        }
-
-        // Sub-Prioritas 1.2: Cek balasan ke bot untuk melanjutkan percakapan
-        if (repliedMessage.from.id === botInfo.id) {
-            console.log(`[REPLY DETECTED] Balasan dari ${userName} untuk bot.`);
-            const chatHistory = [{ role: "assistant", content: originalMessageText }, { role: "user", content: userInput }];
-            await ctx.replyWithChatAction('typing');
-            const aiResponse = await getAIResponse(chatHistory, userName);
-            await ctx.reply(aiResponse, { reply_to_message_id: ctx.message.message_id });
-            return;
-        }
+    // PRIORITAS 1: Balasan ke bot
+    if (repliedMessage && repliedMessage.from.id === botInfo.id) {
+        console.log(`[REPLY DETECTED] Balasan dari ${userName}`);
+        const chatHistory = [{ role: "assistant", content: repliedMessage.text }, { role: "user", content: userInput }];
+        await processAndReply(chatHistory);
+        return;
     }
 
-    // PRIORITAS 2: Jika bukan balasan, jalankan logika panggilan 'diko'
+    // PRIORITAS 2: Link untuk rangkuman
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urlsFound = userInput.match(urlRegex);
+    if (urlsFound) {
+        console.log(`https://dictionary.cambridge.org/dictionary/english/detected Link dari ${userName}: ${urlsFound[0]}`);
+        await ctx.reply(`Mendeteksi link, saya akan coba merangkumnya... 📄`, { reply_to_message_id: ctx.message.message_id });
+        try {
+            const { data } = await axios.get(urlsFound[0]);
+            const $ = cheerio.load(data);
+            const mainText = $('p').text().replace(/\s\s+/g, ' ').trim();
+            if (mainText.length < 200) {
+                await ctx.reply("Maaf, tidak cukup teks paragraf untuk dirangkum.", { reply_to_message_id: ctx.message.message_id });
+                return;
+            }
+            const promptForSummary = `Rangkum poin-poin utama dari artikel berikut dalam 3-5 kalimat, dalam bahasa Indonesia: "${mainText.substring(0, 4000)}"`;
+            await processAndReply(promptForSummary);
+        } catch (error) {
+            console.error("Gagal merangkum URL:", error.message);
+            await ctx.reply("Maaf, terjadi kesalahan saat mengakses link tersebut.", { reply_to_message_id: ctx.message.message_id });
+        }
+        return;
+    }
+
+    // PRIORITAS 3: Panggilan 'diko' atau di chat pribadi
     const shouldRespond = chatType === 'private' || userInput.toLowerCase().includes('diko');
     if (shouldRespond) {
-        console.log(`[TRIGGERED] Pesan dari ${userName} di chat ${chatType}: ${userInput}`);
-        await ctx.replyWithChatAction('typing');
-        const aiResponse = await getAIResponse(userInput, userName);
-        await ctx.reply(aiResponse, { reply_to_message_id: ctx.message.message_id });
+        console.log(`[TRIGGERED] Pesan dari ${userName} di ${chatType}`);
+        await processAndReply(userInput);
     }
 });
 
