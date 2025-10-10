@@ -60,7 +60,7 @@ async function getAIResponse(userInput, userName) {
 // --- FUNGSI AI BARU UNTUK GAMBAR (VISION) ---
 async function getAIResponseWithImage(caption, userName, imageUrl) {
     try {
-        const fullPrompt = `Anda adalah Diko, asisten pendidikan AI. Pengguna bernama "${userName}" mengirim sebuah gambar. Berdasarkan gambar tersebut dan caption yang diberikan, berikan analisis atau jawaban yang relevan dengan dunia pendidikan. Caption: "${caption}"`;
+        const fullPrompt = `Anda adalah Diko, asisten pendidikan AI di Telegram. Sapa pengguna dengan Bapak/Ibu berdasarkan nama beliau: "${userName}". Beliau mengirim gambar dan Caption: "${caption}"`;
 
         const response = await openai.responses.create({
             // Pastikan menggunakan model yang mendukung vision, contoh: gpt-4o, gpt-4-turbo
