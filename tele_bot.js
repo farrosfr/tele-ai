@@ -16,6 +16,8 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 // --- FUNGSI PEMECAH PESAN PANJANG ---
 async function sendLongMessage(ctx, message) {
+    message = message.replace(/\*/g, ''); // Menghilangkan format markdown asterisk
+
     const MAX_LENGTH = 4096;
     if (message.length <= MAX_LENGTH) {
         return await ctx.reply(message, { reply_to_message_id: ctx.message.message_id });
