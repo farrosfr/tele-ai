@@ -18,15 +18,12 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 async function sendLongMessage(ctx, message) {
     const MAX_LENGTH = 4096;
     if (message.length <= MAX_LENGTH) {
-        // Jika pesan tidak panjang, kirim seperti biasa
         return await ctx.reply(message, { reply_to_message_id: ctx.message.message_id });
     }
-
+    // ... (sisa fungsi sendLongMessage tetap sama)
     console.log(`[INFO] Pesan terlalu panjang (${message.length} karakter), akan dipecah.`);
     const messageParts = [];
     let currentPart = '';
-
-    // Pecah berdasarkan baris baru untuk menjaga format
     const lines = message.split('\n');
     for (const line of lines) {
         if (currentPart.length + line.length + 1 > MAX_LENGTH) {
@@ -36,22 +33,18 @@ async function sendLongMessage(ctx, message) {
         currentPart += line + '\n';
     }
     messageParts.push(currentPart);
-
-    // Kirim bagian pertama sebagai balasan
     await ctx.reply(messageParts[0], { reply_to_message_id: ctx.message.message_id });
-
-    // Kirim bagian selanjutnya
     for (let i = 1; i < messageParts.length; i++) {
-        // Beri sedikit jeda agar tidak di-rate limit oleh Telegram
         await new Promise(resolve => setTimeout(resolve, 500));
         await ctx.reply(messageParts[i]);
     }
 }
 
 
+// --- Fungsi AI untuk Teks ---
 async function getAIResponse(userInput, userName) {
     try {
-        const instructions = `Anda adalah Diko, asisten pendidikan AI di Telegram. Sapa pengguna dengan Bapak/Ibu berdasarkan nama beliau: "${userName}" . Jawab pertanyaan mereka dengan jelas dan sopan dalm indonesia. Gunakan bahasa yang mudah dimengerti, hindari jargon teknis. Jika pertanyaan tidak jelas, minta klarifikasi. Jika pertanyaan di luar topik pendidikan, jawab dengan sopan bahwa Anda hanya fokus pada pendidikan. respon maksimal 3200 karakter`;
+        const instructions = `Anda adalah Diko, asisten pendidikan AI di Telegram. Sapa pengguna dengan Bapak/Ibu berdasarkan nama beliau: "${userName}". Jawab pertanyaan mereka dengan jelas dan sopan dalam bahasa Indonesia. Gunakan bahasa yang mudah dimengerti, hindari jargon teknis. Jika pertanyaan tidak jelas, minta klarifikasi. Jika pertanyaan di luar topik pendidikan, jawab dengan sopan bahwa Anda hanya fokus pada pendidikan. Respon maksimal 3200 karakter.`;
         const response = await openai.responses.create({
             model: "gpt-5-mini",
             instructions: instructions,
@@ -59,10 +52,39 @@ async function getAIResponse(userInput, userName) {
         });
         return response.output_text;
     } catch (error) {
-        console.error("Error saat memanggil OpenAI API:", error);
+        console.error("Error saat memanggil OpenAI API (Teks):", error);
         return "Maaf, sepertinya AI sedang mengalami sedikit gangguan. 🙏";
     }
 }
+
+// --- FUNGSI AI BARU UNTUK GAMBAR (VISION) ---
+async function getAIResponseWithImage(caption, userName, imageUrl) {
+    try {
+        const fullPrompt = `Anda adalah Diko, asisten pendidikan AI. Pengguna bernama "${userName}" mengirim sebuah gambar. Berdasarkan gambar tersebut dan caption yang diberikan, berikan analisis atau jawaban yang relevan dengan dunia pendidikan. Caption: "${caption}"`;
+
+        const response = await openai.responses.create({
+            // Pastikan menggunakan model yang mendukung vision, contoh: gpt-4o, gpt-4-turbo
+            model: "gpt-4o", 
+            input: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "input_text", text: fullPrompt },
+                        {
+                            type: "input_image",
+                            image_url: imageUrl, // Kirim URL gambar ke OpenAI
+                        },
+                    ],
+                },
+            ],
+        });
+        return response.output_text;
+    } catch (error) {
+        console.error("Error saat memanggil OpenAI API (Vision):", error);
+        return "Maaf, Diko kesulitan menganalisis gambar ini.  Coba lagi nanti ya. 🙏";
+    }
+}
+
 
 // --- Logika Bot Telegram ---
 let botInfo;
@@ -76,6 +98,35 @@ bot.start((ctx) => {
     ctx.reply(`Halo ${userName}! 👋\n\nSaya Diko, Asisten AI untuk membantu guru dan siswa di dunia pendidikan.`);
 });
 
+// --- LISTENER BARU UNTUK PESAN FOTO ---
+bot.on('photo', async (ctx) => {
+    const caption = ctx.message.caption || '';
+    const userName = ctx.message.from.first_name || "Pengguna";
+
+    // Cek apakah caption mengandung kata "diko"
+    if (caption.toLowerCase().includes('diko')) {
+        console.log(`[PHOTO DETECTED] Gambar dengan caption 'diko' dari ${userName}.`);
+        await ctx.replyWithChatAction('typing');
+
+        try {
+            // Dapatkan URL gambar dari Telegram
+            // 'photo' adalah array, ambil foto kualitas terbaik (terakhir)
+            const fileId = ctx.message.photo.pop().file_id;
+            const imageUrl = await ctx.telegram.getFileLink(fileId);
+
+            // Panggil fungsi AI Vision dengan URL gambar
+            const aiResponse = await getAIResponseWithImage(caption, userName, imageUrl.href);
+            await sendLongMessage(ctx, aiResponse);
+
+        } catch (error) {
+            console.error("Error saat memproses gambar:", error);
+            await ctx.reply("Maaf, terjadi kesalahan saat saya mencoba melihat gambar tersebut.");
+        }
+    }
+});
+
+
+// Listener untuk pesan teks (tidak berubah banyak)
 bot.on('text', async (ctx) => {
     if (!botInfo) return;
 
@@ -84,23 +135,18 @@ bot.on('text', async (ctx) => {
     const chatType = ctx.chat.type;
     const repliedMessage = ctx.message.reply_to_message;
 
-    // Fungsi untuk memproses dan mengirim jawaban AI
+    // ... (sisa kode 'text' listener tetap sama) ...
     const processAndReply = async (input) => {
         await ctx.replyWithChatAction('typing');
         const aiResponse = await getAIResponse(input, userName);
-        // --- Gunakan fungsi baru untuk mengirim ---
         await sendLongMessage(ctx, aiResponse);
     };
-
-    // PRIORITAS 1: Balasan ke bot
     if (repliedMessage && repliedMessage.from.id === botInfo.id) {
         console.log(`[REPLY DETECTED] Balasan dari ${userName}`);
         const chatHistory = [{ role: "assistant", content: repliedMessage.text }, { role: "user", content: userInput }];
         await processAndReply(chatHistory);
         return;
     }
-
-    // PRIORITAS 2: Link untuk rangkuman
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urlsFound = userInput.match(urlRegex);
     if (urlsFound) {
@@ -122,8 +168,6 @@ bot.on('text', async (ctx) => {
         }
         return;
     }
-
-    // PRIORITAS 3: Panggilan 'diko' atau di chat pribadi
     const shouldRespond = chatType === 'private' || userInput.toLowerCase().includes('diko');
     if (shouldRespond) {
         console.log(`[TRIGGERED] Pesan dari ${userName} di ${chatType}`);
