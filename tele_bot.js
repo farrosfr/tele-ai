@@ -46,7 +46,7 @@ async function sendLongMessage(ctx, message) {
 // --- Fungsi AI untuk Teks ---
 async function getAIResponse(userInput, userName) {
     try {
-        const instructions = `Anda adalah Diko, asisten pendidikan AI di Telegram. Sapa pengguna dengan Bapak/Ibu berdasarkan nama beliau: "${userName}". Jawab pertanyaan mereka dengan jelas dan sopan dalam bahasa Indonesia. Gunakan bahasa yang mudah dimengerti, hindari jargon teknis. Jika pertanyaan tidak jelas, minta klarifikasi. Jika pertanyaan di luar topik pendidikan, jawab dengan sopan bahwa Anda hanya fokus pada pendidikan. Respon maksimal 3200 karakter.`;
+        const instructions = `Anda adalah Jejoo, asisten pendidikan AI di Telegram. Sapa pengguna dengan Bapak/Ibu berdasarkan nama beliau: "${userName}". Jawab pertanyaan mereka dengan jelas dan sopan dalam bahasa Indonesia. Gunakan bahasa yang mudah dimengerti, hindari jargon teknis. Jika pertanyaan tidak jelas, minta klarifikasi. Jika pertanyaan di luar topik pendidikan, jawab dengan sopan bahwa Anda hanya fokus pada pendidikan. Respon maksimal 3200 karakter.`;
         const response = await openai.responses.create({
             model: "gpt-5-mini",
             instructions: instructions,
@@ -62,7 +62,7 @@ async function getAIResponse(userInput, userName) {
 // --- FUNGSI AI BARU UNTUK GAMBAR (VISION) ---
 async function getAIResponseWithImage(caption, userName, imageUrl) {
     try {
-        const fullPrompt = `Anda adalah Diko, asisten pendidikan AI di Telegram. Sapa pengguna dengan Bapak/Ibu berdasarkan nama beliau: "${userName}". Beliau mengirim gambar dan Caption: "${caption}"`;
+        const fullPrompt = `Anda adalah Jejoo, asisten pendidikan AI di Telegram. Sapa pengguna dengan Bapak/Ibu berdasarkan nama beliau: "${userName}". Beliau mengirim gambar dan Caption: "${caption}"`;
 
         const response = await openai.responses.create({
             // Pastikan menggunakan model yang mendukung vision, contoh: gpt-4o, gpt-4-turbo
@@ -83,7 +83,7 @@ async function getAIResponseWithImage(caption, userName, imageUrl) {
         return response.output_text;
     } catch (error) {
         console.error("Error saat memanggil OpenAI API (Vision):", error);
-        return "Maaf, Diko kesulitan menganalisis gambar ini.  Coba lagi nanti ya. 🙏";
+        return "Maaf, Jejoo kesulitan menganalisis gambar ini.  Coba lagi nanti ya. 🙏";
     }
 }
 
@@ -97,7 +97,7 @@ bot.telegram.getMe().then(info => {
 
 bot.start((ctx) => {
     const userName = ctx.message.from.first_name || "Pengguna";
-    ctx.reply(`Halo ${userName}! 👋\n\nSaya Diko, Asisten AI untuk membantu guru dan siswa di dunia pendidikan.`);
+    ctx.reply(`Halo ${userName}! 👋\n\nSaya Jejoo, Asisten AI untuk membantu guru dan siswa di dunia pendidikan.`);
 });
 
 // --- LISTENER BARU UNTUK PESAN FOTO ---
@@ -105,9 +105,8 @@ bot.on('photo', async (ctx) => {
     const caption = ctx.message.caption || '';
     const userName = ctx.message.from.first_name || "Pengguna";
 
-    // Cek apakah caption mengandung kata "diko"
-    if (caption.toLowerCase().includes('diko')) {
-        console.log(`[PHOTO DETECTED] Gambar dengan caption 'diko' dari ${userName}.`);
+    if (caption.toLowerCase().includes('jejoo')) {
+        console.log(`[PHOTO DETECTED] Gambar dengan caption 'jejoo' dari ${userName}.`);
         await ctx.replyWithChatAction('typing');
 
         try {
@@ -170,7 +169,7 @@ bot.on('text', async (ctx) => {
         }
         return;
     }
-    const shouldRespond = chatType === 'private' || userInput.toLowerCase().includes('diko');
+    const shouldRespond = chatType === 'private' || userInput.toLowerCase().includes('jejoo');
     if (shouldRespond) {
         console.log(`[TRIGGERED] Pesan dari ${userName} di ${chatType}`);
         await processAndReply(userInput);
