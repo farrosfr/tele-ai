@@ -142,11 +142,29 @@ bot.on('text', async (ctx) => {
         const aiResponse = await getAIResponse(input, userName);
         await sendLongMessage(ctx, aiResponse);
     };
-    if (repliedMessage && repliedMessage.from.id === botInfo.id) {
-        console.log(`[REPLY DETECTED] Balasan dari ${userName}`);
-        const chatHistory = [{ role: "assistant", content: repliedMessage.text }, { role: "user", content: userInput }];
-        await processAndReply(chatHistory);
-        return;
+
+    // --- LOGIKA BARU: Balasan ke Pengguna Lain dengan Trigger 'jejoo' ---
+    if (repliedMessage && userInput.toLowerCase().includes('jejoo')) {
+        // Pastikan pesan yang dibalas memiliki teks
+        if (repliedMessage.text) {
+            // Jangan proses jika membalas bot itu sendiri (sudah ditangani di bawah)
+            if (repliedMessage.from.id === botInfo.id) {
+                 console.log(`[REPLY DETECTED] Balasan dari ${userName}`);
+                 const chatHistory = [{ role: "assistant", content: repliedMessage.text }, { role: "user", content: userInput }];
+                 await processAndReply(chatHistory);
+                 return;
+            }
+
+            console.log(`[REPLY TO USER DETECTED] ${userName} mereply pesan lain dengan trigger 'jejoo'.`);
+            const originalMessageText = repliedMessage.text;
+            const originalMessageAuthor = repliedMessage.from.first_name || "Seseorang";
+
+            // Gabungkan pesan asli dan balasan untuk menjadi konteks bagi AI
+            const combinedInput = `Tanggapi konteks percakapan berikut. Pesan asli dari "${originalMessageAuthor}": "${originalMessageText}". Kemudian, "${userName}" berkomentar: "${userInput}"`;
+
+            await processAndReply(combinedInput);
+            return; // Hentikan pemrosesan lebih lanjut agar tidak ada balasan ganda
+        }
     }
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urlsFound = userInput.match(urlRegex);
